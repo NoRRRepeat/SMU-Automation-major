@@ -1,0 +1,116 @@
+C51 COMPILER V9.54   MAIN                                                                  11/08/2024 23:11:31 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REGX51.H> 
+   2          #include "Delay.h"
+   3          sbit buzz=P0^6;
+   4          sbit S4=P3^3;
+   5          sbit S5=P3^2;
+   6          unsigned int choose_hz=1,control_sound=0,k=0,x=0,y=0;
+   7          
+   8          void outerinit()
+   9          {
+  10   1        EX0=1;
+  11   1        EX1=1;
+  12   1      }
+  13          
+  14          void InitTimer0() //定时器初始化
+  15          {
+  16   1        TMOD = 0X01;
+  17   1        TH0 = (65536 - 500) / 256;
+  18   1        TL0 = (65536 - 500) % 256;
+  19   1        
+  20   1        ET0 = 1;
+  21   1        EA = 1;
+  22   1        TR0 = 1;
+  23   1      }
+  24          
+  25          
+  26          void main()
+  27          {
+  28   1        InitTimer0();
+  29   1        outerinit();
+  30   1        P2 = (P2 & 0X1F) | 0Xa0;
+  31   1        buzz = 0X00;
+  32   1        while(1)
+  33   1        { 
+  34   2          if(control_sound==0) buzz=0x00;
+  35   2          if(choose_hz==1&&control_sound==1) //hz=0 -> 1khz    hz=1 ->500hz
+  36   2          {
+  37   3            k=0;
+  38   3            while(k<1);
+  39   3            buzz=~buzz;
+  40   3            x++;
+  41   3            if(x>=200) 
+  42   3             {
+  43   4               choose_hz=0;  //跳到另一个蜂鸣器
+  44   4               x=0;
+  45   4             }    
+  46   3          }
+  47   2          if(choose_hz==0&&control_sound==1)
+  48   2          { 
+  49   3            k=0;
+  50   3            while(k<2);
+  51   3              buzz=~buzz;
+  52   3              y++;
+  53   3            if(y>=200) 
+  54   3            {
+C51 COMPILER V9.54   MAIN                                                                  11/08/2024 23:11:31 PAGE 2   
+
+  55   4              choose_hz=1;  //跳到另一个蜂鸣器
+  56   4               y=0;
+  57   4            }
+  58   3          }
+  59   2        }
+  60   1      }
+  61          void  ServerTimer0() interrupt 1
+  62          {
+  63   1        TH0 = (65535 - 500) / 256;   //0.5ms
+  64   1        TL0 = (65535 - 500) % 256;
+  65   1        k++;
+  66   1      }
+  67          
+  68          void isr0 () interrupt 0
+  69          {
+  70   1        
+  71   1        Delay(10);
+  72   1        if(S5==0) 
+  73   1          { 
+  74   2            control_sound=1;  //=1  响
+  75   2          }
+  76   1        Delay(10);
+  77   1        while(S5==0);
+  78   1      }
+  79          
+  80          void isr2 () interrupt 2
+  81          {
+  82   1        Delay(10);
+  83   1        if(S4==0)
+  84   1         { 
+  85   2           control_sound=0;
+  86   2           buzz=0x00;
+  87   2         }
+  88   1         Delay(10);
+  89   1        while(S4==0);
+  90   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    350    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     10    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

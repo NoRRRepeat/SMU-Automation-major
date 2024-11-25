@@ -1,0 +1,219 @@
+C51 COMPILER V9.54   MAIN                                                                  11/22/2024 20:40:51 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REGX51.H>
+   2          //#include "Delay.h"
+   3          
+   4          unsigned char count=0;
+   5          unsigned char seg[8] = {16,16,16,16,16,16,16,16}; //初始化全黑
+   6          unsigned char second=0,tensecond=0,minute=0,tenminute=0;
+   7          bit read_flag;  //while1 的读取标志位
+   8          sfr AUXR=0x8e;
+   9          unsigned char urdat=0;
+  10          
+  11          
+  12          
+  13          void Delay(unsigned int xms)
+  14          {
+  15   1        unsigned char i, j;
+  16   1        while(xms--)
+  17   1        {
+  18   2          i = 2;
+  19   2          j = 239;
+  20   2          do
+  21   2          {
+  22   3            while (--j);
+  23   3          } while (--i);
+  24   2        }
+  25   1      }
+  26          
+  27          
+  28          
+  29          unsigned char code SMG_duan[] = {                        
+  30          //   0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+  31              0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90, 0x88, 0x83, 0xC6, 0xA1, 0x86, 0x8E,
+  32          // black  -     H    J    K    L    N    o   P    U     t    G    Q    r   M    y
+  33              0xFF, 0xBF, 0x89, 0xE1, 0x8F, 0xC7, 0xC8, 0xA3, 0x8C, 0xC1, 0x87, 0xC2, 0x98, 0xAF, 0xC8, 0x91,
+  34              0x40, 0x79, 0x24, 0x30, 0x19, 0x12, 0x02, 0x78, 0x00, 0x10, 0xB9
+  35          };    // 0. 1. 2. 3. 4. 5. 6. 7. 8. 9. -1
+  36          
+  37          unsigned char code SMG_wei[]={0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};      //位码
+  38          
+  39          void sys_init()
+  40          {
+  41   1         P2 = (P2&0x1f)|0x80;
+  42   1         P0=0xff;
+  43   1         P2 = (P2&0x1f)|0xa0;
+  44   1         P0=0x00;
+  45   1         P2 = (P2&0x1f);
+  46   1      }
+  47          
+  48          void UartInit()
+  49          {
+  50   1        TMOD = 0X20;
+  51   1        TH1 = 0XFD;      //9600BFS
+  52   1        TL1 = 0XFD;
+  53   1        TR1 = 1;   //开定时器
+  54   1        
+C51 COMPILER V9.54   MAIN                                                                  11/22/2024 20:40:51 PAGE 2   
+
+  55   1        SCON = 0X50;
+  56   1        AUXR = 0X00;
+  57   1        
+  58   1        ES = 1; 
+  59   1        EA = 1;
+  60   1      }
+  61          
+  62          void InitTimer0() //定时器初始化
+  63          {
+  64   1        TMOD = 0X01;
+  65   1        TH0 = (65535 - 4000) / 256;
+  66   1        TL0 = (65535 - 4000) % 256;
+  67   1        
+  68   1        ET0 = 1;
+  69   1        EA = 1;
+  70   1        TR0 = 1;
+  71   1      }
+  72          
+  73          
+  74          
+  75          void Seg_Show(){
+  76   1        static unsigned char num;
+  77   1        
+  78   1         P0=0xff;          P2=(P2 & 0x1f) | 0xe0;       P2=(P2 & 0x1f);
+  79   1        P0=SMG_wei[num];   P2=(P2 & 0x1f) | 0xc0;       P2=(P2 & 0x1f);
+  80   1        P0=SMG_duan[seg[num]];P2=(P2 & 0x1f) | 0xe0;   P2=(P2 & 0x1f);    //是因为共阳
+  81   1        
+  82   1        num++;
+  83   1        num%=8; //循环
+  84   1      }
+  85          
+  86          void Seg_Set(unsigned char t1,t2,t3,t4,t5,t6,t7,t8){
+  87   1        seg[0]=t1;
+  88   1        seg[1]=t2;
+  89   1        seg[2]=t3;
+  90   1        seg[3]=t4;
+  91   1        seg[4]=t5;
+  92   1        seg[5]=t6;
+  93   1        seg[6]=t7;
+  94   1        seg[7]=t8;
+  95   1        
+  96   1      }
+  97          
+  98          
+  99          void main()
+ 100          {
+ 101   1         sys_init();
+ 102   1         InitTimer0();
+ 103   1         UartInit();
+ 104   1        while(1)
+ 105   1        {  
+ 106   2            if(read_flag)
+ 107   2            { 
+ 108   3      /////////////////             
+ 109   3            SBUF = tenminute + '0'; 
+ 110   3            while(!TI); 
+ 111   3            TI = 0; 
+ 112   3            SBUF = minute + '0'; 
+ 113   3            while(!TI); 
+ 114   3            TI = 0; 
+ 115   3            SBUF = ':'; 
+ 116   3            while(!TI); 
+C51 COMPILER V9.54   MAIN                                                                  11/22/2024 20:40:51 PAGE 3   
+
+ 117   3            TI = 0; 
+ 118   3            SBUF = tensecond + '0'; 
+ 119   3            while(!TI); 
+ 120   3            TI = 0; 
+ 121   3            SBUF = second + '0'; 
+ 122   3            while(!TI); 
+ 123   3            TI = 0; 
+ 124   3      ///////////////////////////////
+ 125   3               read_flag=0;
+ 126   3               second++;
+ 127   3               if(second>9)
+ 128   3               {
+ 129   4                 tensecond++;
+ 130   4                 if(tensecond>5)  //因为tensecond++在上，会出现7
+ 131   4                 {
+ 132   5                    minute++;
+ 133   5                   if(minute>9)
+ 134   5                   {
+ 135   6                      tenminute++;
+ 136   6                       if(tenminute>5)
+ 137   6                       {
+ 138   7                          tenminute=0;
+ 139   7                       }
+ 140   6                       minute=0;
+ 141   6                   }
+ 142   5                   tensecond=0;
+ 143   5                 }
+ 144   4                  second=0;
+ 145   4               }
+ 146   3            }
+ 147   2            Seg_Set(16,16,16,16,tenminute,minute,tensecond,second);
+ 148   2            Seg_Show();
+ 149   2            Delay(10);
+ 150   2         }
+ 151   1      
+ 152   1      
+ 153   1      }
+ 154          
+ 155          void outerserver() interrupt 4
+ 156          {
+ 157   1         if(TI==1)
+ 158   1        {
+ 159   2          TI=0;
+ 160   2        }
+ 161   1        if(RI == 1)
+ 162   1        {
+ 163   2          RI = 0;
+ 164   2          urdat=SBUF;                   //在此写入代码
+ 165   2          switch (urdat)
+ 166   2          {
+ 167   3            case '1':TR0=~TR0 ;break;
+ 168   3            case '2':TR0=~TR0 ;break;
+ 169   3            case '3':tenminute=minute=tensecond=second=0 ;break;
+ 170   3            default: SBUF=0x0e; P0=0xff;
+ 171   3          }
+ 172   2        }
+ 173   1      
+ 174   1      }
+ 175          
+ 176          
+ 177          void ServiceTime0() interrupt 1   //中断服务程序
+ 178          {
+C51 COMPILER V9.54   MAIN                                                                  11/22/2024 20:40:51 PAGE 4   
+
+ 179   1        
+ 180   1        TH0 = (65535 - 4000) / 256;   //4ms
+ 181   1        TL0 = (65535 - 4000) % 256;
+ 182   1        count++;
+ 183   1      
+ 184   1        if(count%250==0)
+ 185   1        {
+ 186   2          read_flag=1;
+ 187   2          count=0;
+ 188   2        }
+ 189   1      } 
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    433    ----
+   CONSTANT SIZE    =     51    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     15      15
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
