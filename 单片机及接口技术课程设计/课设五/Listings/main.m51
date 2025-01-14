@@ -1,0 +1,190 @@
+BL51 BANKED LINKER/LOCATER V6.22                                                        12/12/2024  09:18:35  PAGE 1
+
+
+BL51 BANKED LINKER/LOCATER V6.22, INVOKED BY:
+E:\KEIL\C51\BIN\BL51.EXE .\Objects\main.obj TO .\Objects\main PRINT (.\Listings\main.m51)
+
+
+MEMORY MODEL: SMALL
+
+
+INPUT MODULES INCLUDED:
+  .\Objects\main.obj (MAIN)
+  E:\KEIL\C51\LIB\C51S.LIB (?C_STARTUP)
+  E:\KEIL\C51\LIB\C51S.LIB (?C?SLDIV)
+  E:\KEIL\C51\LIB\C51S.LIB (?C_INIT)
+  E:\KEIL\C51\LIB\C51S.LIB (?C?ULDIV)
+
+
+LINK MAP OF MODULE:  .\Objects\main (MAIN)
+
+
+            TYPE    BASE      LENGTH    RELOCATION   SEGMENT NAME
+            -----------------------------------------------------
+
+            * * * * * * *   D A T A   M E M O R Y   * * * * * * *
+            REG     0000H     0008H     ABSOLUTE     "REG BANK 0"
+            DATA    0008H     0006H     UNIT         ?DT?MAIN
+            IDATA   000EH     0001H     UNIT         ?STACK
+
+            * * * * * * *   C O D E   M E M O R Y   * * * * * * *
+            CODE    0000H     0003H     ABSOLUTE     
+            CODE    0003H     0004H     UNIT         ?C_INITSEG
+                    0007H     0004H                  *** GAP ***
+            CODE    000BH     0003H     ABSOLUTE     
+            CODE    000EH     00F5H     UNIT         ?CO?MAIN
+            CODE    0103H     00CEH     UNIT         ?C?LIB_CODE
+            CODE    01D1H     008CH     UNIT         ?C_C51STARTUP
+            CODE    025DH     005BH     UNIT         ?PR?PLAYMUSIC?MAIN
+            CODE    02B8H     0044H     UNIT         ?C?LDIV
+            CODE    02FCH     0039H     UNIT         ?PR?SYS_INIT?MAIN
+            CODE    0335H     001EH     UNIT         ?PR?_DELAYMS?MAIN
+            CODE    0353H     001DH     UNIT         ?PR?MAIN?MAIN
+            CODE    0370H     001CH     UNIT         ?PR?_SETTIMER?MAIN
+            CODE    038CH     001CH     UNIT         ?PR?TIMER0SERVER?MAIN
+
+
+
+OVERLAY MAP OF MODULE:   .\Objects\main (MAIN)
+
+
+SEGMENT
+  +--> CALLED SEGMENT
+---------------------
+?C_C51STARTUP
+  +--> ?PR?MAIN?MAIN
+  +--> ?C_INITSEG
+
+?PR?MAIN?MAIN
+  +--> ?PR?SYS_INIT?MAIN
+  +--> ?PR?PLAYMUSIC?MAIN
+  +--> ?PR?_DELAYMS?MAIN
+BL51 BANKED LINKER/LOCATER V6.22                                                      12/12/2024  09:18:35  PAGE 2
+
+
+
+?PR?PLAYMUSIC?MAIN
+  +--> ?CO?MAIN
+  +--> ?PR?_SETTIMER?MAIN
+
+
+
+SYMBOL TABLE OF MODULE:  .\Objects\main (MAIN)
+
+  VALUE           TYPE          NAME
+  ----------------------------------
+
+  -------         MODULE        MAIN
+  C:0000H         SYMBOL        _ICE_DUMMY_
+  D:0080H         PUBLIC        P0
+  D:00A0H         PUBLIC        P2
+  B:00A8H.7       PUBLIC        EA
+  D:0008H         PUBLIC        timer0Low
+  D:0009H         PUBLIC        index
+  D:000AH         PUBLIC        beat
+  C:0038H         PUBLIC        music
+  C:0353H         PUBLIC        main
+  C:0370H         PUBLIC        _SetTimer
+  C:0335H         PUBLIC        _DelayMs
+  D:0089H         PUBLIC        TMOD
+  C:02FCH         PUBLIC        Sys_Init
+  D:000BH         PUBLIC        note
+  C:025DH         PUBLIC        Playmusic
+  D:000CH         PUBLIC        duty
+  B:00A8H.1       PUBLIC        ET0
+  D:008CH         PUBLIC        TH0
+  C:038CH         PUBLIC        Timer0server
+  D:008AH         PUBLIC        TL0
+  B:0088H.4       PUBLIC        TR0
+  D:000DH         PUBLIC        timer0High
+  C:000EH         PUBLIC        FreqTable
+  B:0080H.6       PUBLIC        Beep
+  -------         PROC          SYS_INIT
+  C:02FCH         LINE#         49
+  C:02FCH         LINE#         50
+  C:030AH         LINE#         51
+  C:0318H         LINE#         52
+  C:0326H         LINE#         53
+  C:0334H         LINE#         54
+  -------         ENDPROC       SYS_INIT
+  -------         PROC          _SETTIMER
+  D:0006H         SYMBOL        freq
+  -------         DO            
+  D:0004H         SYMBOL        TimerValue
+  -------         ENDDO         
+  C:0370H         LINE#         57
+  C:0370H         LINE#         58
+  C:0387H         LINE#         59
+  C:0389H         LINE#         60
+  C:038BH         LINE#         61
+  -------         ENDPROC       _SETTIMER
+  -------         PROC          PLAYMUSIC
+BL51 BANKED LINKER/LOCATER V6.22                                                      12/12/2024  09:18:35  PAGE 3
+
+
+  C:025DH         LINE#         64
+  C:025DH         LINE#         65
+  C:0266H         LINE#         66
+  C:0266H         LINE#         67
+  C:0269H         LINE#         68
+  C:026AH         LINE#         70
+  C:026AH         LINE#         71
+  C:0275H         LINE#         72
+  C:027DH         LINE#         75
+  C:0285H         LINE#         76
+  C:029BH         LINE#         77
+  C:029EH         LINE#         89
+  C:02B5H         LINE#         90
+  C:02B7H         LINE#         91
+  C:02B7H         LINE#         92
+  -------         ENDPROC       PLAYMUSIC
+  -------         PROC          TIMER0SERVER
+  C:038CH         LINE#         95
+  C:038EH         LINE#         97
+  C:0390H         LINE#         98
+  C:0398H         LINE#         99
+  C:039AH         LINE#         100
+  C:039DH         LINE#         101
+  C:03A0H         LINE#         102
+  C:03A3H         LINE#         103
+  C:03A5H         LINE#         104
+  -------         ENDPROC       TIMER0SERVER
+  -------         PROC          _DELAYMS
+  D:0006H         SYMBOL        ms
+  -------         DO            
+  D:0006H         SYMBOL        i
+  D:0004H         SYMBOL        j
+  -------         ENDDO         
+  C:0335H         LINE#         130
+  C:0335H         LINE#         132
+  C:033EH         LINE#         133
+  C:034BH         LINE#         134
+  C:0352H         LINE#         135
+  -------         ENDPROC       _DELAYMS
+  -------         PROC          MAIN
+  C:0353H         LINE#         138
+  C:0353H         LINE#         139
+  C:0356H         LINE#         141
+  C:0359H         LINE#         142
+  C:035BH         LINE#         143
+  C:035DH         LINE#         152
+  C:035DH         LINE#         153
+  C:0360H         LINE#         154
+  C:036CH         LINE#         155
+  C:036EH         LINE#         156
+  -------         ENDPROC       MAIN
+  -------         ENDMOD        MAIN
+
+  -------         MODULE        ?C?SLDIV
+  C:02B8H         PUBLIC        ?C?SLDIV
+  -------         ENDMOD        ?C?SLDIV
+
+BL51 BANKED LINKER/LOCATER V6.22                                                      12/12/2024  09:18:35  PAGE 4
+
+
+  -------         MODULE        ?C?ULDIV
+  C:013FH         PUBLIC        ?C?ULDIV
+  -------         ENDMOD        ?C?ULDIV
+
+Program Size: data=15.0 xdata=0 code=932
+LINK/LOCATE RUN COMPLETE.  0 WARNING(S),  0 ERROR(S)

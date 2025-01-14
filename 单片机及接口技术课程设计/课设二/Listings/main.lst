@@ -1,0 +1,429 @@
+C51 COMPILER V9.54   MAIN                                                                  12/03/2024 15:25:19 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REGX51.H>
+   2          #include <intrins.h>
+   3          #include "iic.h"
+   4          
+   5          unsigned char num,count,duty_count,duty,pwm_count;
+   6          unsigned char mode=1;  //控制模式
+   7          unsigned char number; //led模式
+   8          unsigned int interval=400;
+   9          unsigned int ref_ad,led_state=0xff;
+  10          unsigned char i;  //循环用                 //a 10 b 11 c 12 d 13 e 14 f 15
+  11          unsigned int ledarr1[]={0x7f,0xbf,0xdf,0xef,0xf7,0xfb,0xfd,0xfe};   //0111 1111  1011 1111  1101 1111  111
+             -0 1111 1111 0111
+  12          unsigned int ledarr2[]={0xfe,0xfd,0xfb,0xf7,0xef,0xdf,0xbf,0x7f};    //1111 1110
+  13          unsigned int ledarr3[]={0x7e,0xbd,0xdb,0xe7};  //0111 1110 -> 1110 0111
+  14          unsigned int ledarr4[]={0xe7,0xdb,0xbd,0x7e};
+  15          float ad;
+  16          bit key_flag,led_running=1,ad_mea;
+  17          
+  18          sbit S7 = P3 ^ 0; // S7 
+  19          sbit S6 = P3 ^ 1; // S6 
+  20          sbit S5 = P3 ^ 2; // S5 
+  21          sbit S4 = P3 ^ 3; // S4
+  22          
+  23          void led_left_to_right();
+  24          void led_right_to_left();
+  25          void led_to_middle();
+  26          void middle_to_out();
+  27          void LED_show();
+  28          void LED_set();
+  29          void interval_set();
+  30          void LED_real_show(unsigned char number);
+  31          
+  32          void Delay(unsigned int xms)
+  33          {
+  34   1        unsigned char i, j;
+  35   1        while(xms--)
+  36   1        {
+  37   2          i = 2;
+  38   2          j = 239;
+  39   2          do
+  40   2          {
+  41   3            while (--j);
+  42   3          } while (--i);
+  43   2        }
+  44   1      }
+  45          
+  46          void Sys_Init(){
+  47   1        P0=0xff;P2=(P2 & 0x1f) | 0x80;P2=(P2 & 0x1f);
+  48   1        P0=0xaf;P2=(P2 & 0x1f) | 0xa0;P2=(P2 & 0x1f);
+  49   1        P0=0xff;P2=(P2 & 0x1f) | 0xc0;P2=(P2 & 0x1f); //段码
+  50   1        P0=0xff;P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f); //位码
+  51   1      }
+  52          
+  53          
+C51 COMPILER V9.54   MAIN                                                                  12/03/2024 15:25:19 PAGE 2   
+
+  54          void Timer0Init(void)   //1ms 12mhz
+  55          {
+  56   1        TMOD &= 0xF0;   
+  57   1        TL0 = 0x18;   
+  58   1        TH0 = 0xFC; 
+  59   1        TF0 = 0;    
+  60   1        TR0 = 1;    
+  61   1        ET0 = 1;
+  62   1        EA = 1;
+  63   1      }
+  64          
+  65          unsigned char key_scan()
+  66          {
+  67   1          static unsigned char num = 0; 
+  68   1          unsigned char current_key = 0;     
+  69   1      
+  70   1      
+  71   1          if (S7 == 0) current_key = 7;
+  72   1          else if (S6 == 0) current_key = 6;
+  73   1          else if (S5 == 0) current_key = 5;
+  74   1          else if (S4 == 0) current_key = 4;
+  75   1      
+  76   1      
+  77   1          if (current_key != num)  //更新
+  78   1          {
+  79   2              Delay(20);  
+  80   2              if (current_key != num)  
+  81   2              {
+  82   3                  num = current_key;   
+  83   3                  if (current_key != 0)     
+  84   3                  {
+  85   4                      while (current_key == num)  
+  86   4                      {
+  87   5                          if (S7 == 0) current_key = 7;
+  88   5                          else if (S6 == 0) current_key = 6;
+  89   5                          else if (S5 == 0) current_key = 5;
+  90   5                          else if (S4 == 0) current_key = 4;
+  91   5                          else current_key = 0;  
+  92   5                      }
+  93   4                      return num;  
+  94   4                  }
+  95   3              }
+  96   2          }
+  97   1      
+  98   1          return 0;  
+  99   1      }
+ 100          
+ 101          unsigned char code duan[] = {                        
+ 102          //   0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+ 103              0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90, 0x88, 0x83, 0xC6, 0xA1, 0x86, 0x8E,
+ 104          // black  -     H    J    K    L    N    o   P    U     t    G    Q    r   M    y
+ 105              0xFF, 0xBF, 0x89, 0xE1, 0x8F, 0xC7, 0xC8, 0xA3, 0x8C, 0xC1, 0x87, 0xC2, 0x98, 0xAF, 0xC8, 0x91,
+ 106              0x40, 0x79, 0x24, 0x30, 0x19, 0x12, 0x02, 0x78, 0x00, 0x10, 0xB9
+ 107          };    // 0. 1. 2. 3. 4. 5. 6. 7. 8. 9. -1
+ 108          
+ 109          
+ 110          unsigned char code wei[]={0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};      //位码
+ 111          unsigned char seg[8] = {16,16,16,16,16,16,16,16};
+ 112          
+ 113          
+ 114          void Seg_Show(){
+ 115   1        static unsigned char num;
+C51 COMPILER V9.54   MAIN                                                                  12/03/2024 15:25:19 PAGE 3   
+
+ 116   1        
+ 117   1        P0=0xff;P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f);
+ 118   1        P0=wei[num];P2=(P2 & 0x1f) | 0xc0;P2=(P2 & 0x1f);
+ 119   1        P0=duan[seg[num]];P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f);
+ 120   1        
+ 121   1        num++;
+ 122   1        num%=8;
+ 123   1      }
+ 124          
+ 125          void Seg_Set(unsigned char t1,t2,t3,t4,t5,t6,t7,t8){
+ 126   1        seg[0]=t1;
+ 127   1        seg[1]=t2;
+ 128   1        seg[2]=t3;
+ 129   1        seg[3]=t4;
+ 130   1        seg[4]=t5;
+ 131   1        seg[5]=t6;
+ 132   1        seg[6]=t7;
+ 133   1        seg[7]=t8;
+ 134   1        
+ 135   1      }
+ 136          
+ 137          
+ 138          
+ 139          void main()
+ 140          {
+ 141   1        Sys_Init();
+ 142   1        Timer0Init();
+ 143   1        while(1)
+ 144   1        {
+ 145   2           if(key_flag)
+ 146   2          {
+ 147   3             key_flag=0;
+ 148   3             num = key_scan();
+ 149   3          }
+ 150   2          
+ 151   2          if(ad_mea)
+ 152   2          {
+ 153   3            ad_mea=0;
+ 154   3            ad = PCF8591_ADin(0x03);    //获取pcf8591电压
+ 155   3            ref_ad = (ad/255.0)*(5.0);  //转化成0-5v   ad/255.0 乘 参考电压（5v）
+ 156   3            if(ref_ad<1.25)
+ 157   3            {
+ 158   4              duty=90;                  //占空比
+ 159   4              duty_count=1;
+ 160   4            }else if(ref_ad<2.5)
+ 161   3            {
+ 162   4              duty=50;
+ 163   4              duty_count=2;
+ 164   4            }else if(ref_ad<3.75)
+ 165   3            {
+ 166   4              duty=10;
+ 167   4              duty_count=3;
+ 168   4            }else{
+ 169   4              duty=0;
+ 170   4              duty_count=4;
+ 171   4            }
+ 172   3          }
+ 173   2          
+ 174   2        switch(mode)
+ 175   2          {
+ 176   3            case 1:LED_show();break;
+ 177   3            case 2:LED_set();break;
+C51 COMPILER V9.54   MAIN                                                                  12/03/2024 15:25:19 PAGE 4   
+
+ 178   3            case 3:interval_set();break;
+ 179   3          }
+ 180   2        }
+ 181   1       
+ 182   1      }
+ 183          
+ 184          
+ 185          void LED_show()
+ 186          {
+ 187   1        if(num==4)
+ 188   1        {
+ 189   2          mode=2;
+ 190   2          num=0;
+ 191   2        }
+ 192   1      //  
+ 193   1      //  if(num==5)  //led停止或启动
+ 194   1      //  {
+ 195   1      //    led_running = !led_running; 
+ 196   1      //    num=0;
+ 197   1      //  }
+ 198   1        if(led_running)
+ 199   1        {
+ 200   2          LED_real_show(number);
+ 201   2        }else{
+ 202   2          P2=(P2 & 0x1f) | 0x80;
+ 203   2          P0=0xff;
+ 204   2        }
+ 205   1        if(S7==0)
+ 206   1        {
+ 207   2          Delay(10);
+ 208   2          Seg_Set(17,duty_count,16,16,16,16,16,16);
+ 209   2          while(S7==0);
+ 210   2        }else{
+ 211   2          Seg_Set(16,16,16,16,16,16,16,16);
+ 212   2        }
+ 213   1      }
+ 214          
+ 215          void LED_set()
+ 216          {
+ 217   1        if(num==4)
+ 218   1        {
+ 219   2          mode=3;
+ 220   2          num=0;
+ 221   2        }
+ 222   1        if(num==7)  //加
+ 223   1        {
+ 224   2          number++;   //模式
+ 225   2          if(number>4)
+ 226   2          {
+ 227   3            number=1;
+ 228   3          }
+ 229   2          num=0;
+ 230   2        }
+ 231   1        
+ 232   1         if(num==6)  //减
+ 233   1        {
+ 234   2          number--;   //模式
+ 235   2          if(number<1)
+ 236   2          {
+ 237   3            number=4;
+ 238   3          }
+ 239   2          num=0;
+C51 COMPILER V9.54   MAIN                                                                  12/03/2024 15:25:19 PAGE 5   
+
+ 240   2        }
+ 241   1      /////////////////////闪烁///////////////
+ 242   1        if(interval<1000)
+ 243   1        {
+ 244   2         Seg_Set(17,16,17,interval/100%10,interval/10%10,interval%10,16,16);
+ 245   2         Delay(800);
+ 246   2         Seg_Set(17,number,17,interval/100%10,interval/10%10,interval%10,16,16);
+ 247   2         Delay(800);
+ 248   2        }else{
+ 249   2          Seg_Set(17,16,17,interval/1000,interval/100%10,interval/10%10,interval%10,16);
+ 250   2          Delay(800);
+ 251   2          Seg_Set(17,number,17,interval/1000,interval/100%10,interval/10%10,interval%10,16);
+ 252   2          Delay(800);
+ 253   2        }
+ 254   1        //////////////////////////////////////////
+ 255   1      }
+ 256          
+ 257          void interval_set()
+ 258          {
+ 259   1        if(num==7)
+ 260   1        {
+ 261   2          num=0;
+ 262   2          interval+=100;
+ 263   2          if(interval>1200)
+ 264   2          {
+ 265   3            interval=400;
+ 266   3          }
+ 267   2        }
+ 268   1        
+ 269   1         if(num==6)
+ 270   1        {
+ 271   2          num=0;
+ 272   2          interval-=100;
+ 273   2          if(interval<400)
+ 274   2          {
+ 275   3            interval=1200;
+ 276   3          }
+ 277   2        }
+ 278   1        
+ 279   1        if(num==4)
+ 280   1        {
+ 281   2          num=0;
+ 282   2          mode=1;
+ 283   2        }
+ 284   1        ////////////////////////////////////////////////////////////
+ 285   1        Seg_Set(17,number,17,16,16,16,16,16);
+ 286   1        Delay(800);
+ 287   1        if(interval>=1000)
+ 288   1        {
+ 289   2        Seg_Set(17,number,17,interval/1000,interval/100%10,interval/10%10,interval%10,16);
+ 290   2          Delay(800);
+ 291   2        }else{
+ 292   2         Seg_Set(17,number,17,interval/100,interval/10%10,interval%10,16,16);
+ 293   2          Delay(800);
+ 294   2        }
+ 295   1      ///////////////////////////////////////////////////////////////////
+ 296   1      }
+ 297          
+ 298          void LED_real_show(unsigned char number)
+ 299          {
+ 300   1        switch (number)
+ 301   1        {
+C51 COMPILER V9.54   MAIN                                                                  12/03/2024 15:25:19 PAGE 6   
+
+ 302   2          case 1:led_left_to_right();break;
+ 303   2          case 2:led_right_to_left();break;
+ 304   2          case 3:led_to_middle();break;
+ 305   2          case 4:middle_to_out();break;
+ 306   2          default:break;
+ 307   2        }
+ 308   1      }
+ 309          
+ 310          void led_left_to_right()
+ 311          {   
+ 312   1        P2=(P2 & 0x1f) | 0x80;
+ 313   1         for(i=0;i<=7;i++)
+ 314   1        {
+ 315   2      //    P2=(P2 & 0x1f) | 0x80;
+ 316   2          led_state=ledarr1[i];
+ 317   2          Delay(interval);    //waring :因为delay造成的硬性延迟导致了num=5时无法即刻停止
+ 318   2        }                     //waring :因为delay造成的硬性延迟导致了num=5时无法即刻停止
+ 319   1      }
+ 320          
+ 321          void led_right_to_left()
+ 322          {
+ 323   1        P2=(P2 & 0x1f) | 0x80;
+ 324   1         for(i=0;i<=7;i++)
+ 325   1        {
+ 326   2      //    P2=(P2 & 0x1f) | 0x80;
+ 327   2          led_state=ledarr2[i];
+ 328   2          Delay(interval);
+ 329   2        }
+ 330   1      }
+ 331          
+ 332          void led_to_middle()
+ 333          {
+ 334   1        P2=(P2 & 0x1f) | 0x80;
+ 335   1       for(i=0;i<=3;i++)
+ 336   1       {
+ 337   2          led_state=ledarr3[i];
+ 338   2          Delay(interval);
+ 339   2       }
+ 340   1      
+ 341   1      }
+ 342          
+ 343          void middle_to_out()
+ 344          {
+ 345   1        P2=(P2 & 0x1f) | 0x80;
+ 346   1        for(i=0;i<=3;i++)
+ 347   1       {
+ 348   2          led_state=ledarr4[i];
+ 349   2          Delay(interval);
+ 350   2       }
+ 351   1      
+ 352   1      }
+ 353          
+ 354          void Timer0server() interrupt 1
+ 355          {
+ 356   1        Seg_Show();
+ 357   1        count++;
+ 358   1        pwm_count++;
+ 359   1        
+ 360   1            if (pwm_count >= 100) 
+ 361   1          {
+ 362   2              pwm_count = 0;
+ 363   2          }
+C51 COMPILER V9.54   MAIN                                                                  12/03/2024 15:25:19 PAGE 7   
+
+ 364   1      
+ 365   1          if (pwm_count < duty) 
+ 366   1          {
+ 367   2            P2=(P2 & 0x1f) | 0x80;
+ 368   2              P0 = led_state; 
+ 369   2          }
+ 370   1          else
+ 371   1          {
+ 372   2            P2=(P2 & 0x1f) | 0x80;
+ 373   2              P0 = 0xFF; 
+ 374   2          }
+ 375   1          
+ 376   1        if(count%10==0)
+ 377   1        {
+ 378   2          key_flag=1;
+ 379   2        }
+ 380   1        if(count%50==0)
+ 381   1        {
+ 382   2         ad_mea=1;
+ 383   2        }
+ 384   1        count%=1000;  //防溢出
+ 385   1        
+ 386   1        
+ 387   1          if(num==5)  //led停止或启动  因为delay造成的延迟无法立刻生效，放在中断也不会改善
+ 388   1        {
+ 389   2          led_running = !led_running; 
+ 390   2          num=0;
+ 391   2        }
+ 392   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1659    ----
+   CONSTANT SIZE    =     51    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     76      15
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      3    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

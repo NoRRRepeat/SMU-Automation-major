@@ -1,0 +1,378 @@
+C51 COMPILER V9.54   MAIN                                                                  12/02/2024 14:27:04 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REGX51.H>
+   2          #include "ds1302.h"
+   3          
+   4          unsigned char mode=1; //默认时间显示模式 //模式1 时间显示 模式2 时间更改 模式3 闹钟更改
+   5          unsigned char num; //按键数值
+   6          unsigned char count; //中断值 
+   7          unsigned char temp[3];//保存时间设置时变量
+   8          unsigned char index=0; //选择时设置位    
+   9          unsigned char clock[3];  //保存闹钟设置变量
+  10          unsigned char hour,min,sec;
+  11          bit key_flag,time_flag,buzz_on_flag;
+  12          
+  13          sbit S7 = P3 ^ 0; // S7 
+  14          sbit S6 = P3 ^ 1; // S6 
+  15          sbit S5 = P3 ^ 2; // S5 
+  16          sbit S4 = P3 ^ 3; // S4
+  17          
+  18          sbit beep = P0^6;
+  19          void Delay(unsigned int xms)
+  20          {
+  21   1        unsigned char i, j;
+  22   1        while(xms--)
+  23   1        {
+  24   2          i = 2;
+  25   2          j = 239;
+  26   2          do
+  27   2          {
+  28   3            while (--j);
+  29   3          } while (--i);
+  30   2        }
+  31   1      }
+  32          
+  33          void Sys_Init(){
+  34   1        P0=0xff;P2=(P2 & 0x1f) | 0x80;P2=(P2 & 0x1f);
+  35   1        P0=0xaf;P2=(P2 & 0x1f) | 0xa0;P2=(P2 & 0x1f);
+  36   1        P0=0xff;P2=(P2 & 0x1f) | 0xc0;P2=(P2 & 0x1f); //段码
+  37   1        P0=0xff;P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f); //位码
+  38   1      }
+  39          
+  40          
+  41          void Timer0Init(void)   //1ms 12mhz
+  42          {
+  43   1        TMOD &= 0xF0;   
+  44   1        TL0 = 0x18;   
+  45   1        TH0 = 0xFC; 
+  46   1        TF0 = 0;    
+  47   1        TR0 = 1;    
+  48   1        ET0 = 1;
+  49   1        EA = 1;
+  50   1      }
+  51          
+  52          //unsigned char key_scan()
+  53          //{
+  54          //  
+C51 COMPILER V9.54   MAIN                                                                  12/02/2024 14:27:04 PAGE 2   
+
+  55          //   if(S7==0)
+  56          //   {
+  57          //     Delay(20);
+  58          //      if(S7==0)
+  59          //      {
+  60          //        num=7;
+  61          //        while(S7==0);
+  62          //      }
+  63          //   }else if(S6==0)
+  64          //   {
+  65          //     Delay(20);
+  66          //      if(S6==0)
+  67          //      {
+  68          //        num=6;
+  69          //        while(S6==0);
+  70          //      }
+  71          //    }
+  72          //    else if(S5==0)
+  73          //   {
+  74          //     Delay(20);
+  75          //      if(S5==0)
+  76          //      {
+  77          //        num=5;
+  78          //        while(S5==0);
+  79          //      }
+  80          //   }else if(S4==0)
+  81          //   {
+  82          //     Delay(20);
+  83          //      if(S4==0)
+  84          //      {
+  85          //        num=4;
+  86          //        while(S4==0);
+  87          //      }
+  88          //   }else{
+  89          //   return 0;
+  90          //   }
+  91          // return num;
+  92          //}
+  93          unsigned char key_scan()
+  94          {
+  95   1          static unsigned char num = 0; 
+  96   1          unsigned char current_key = 0;     
+  97   1      
+  98   1      
+  99   1          if (S7 == 0) current_key = 7;
+ 100   1          else if (S6 == 0) current_key = 6;
+ 101   1          else if (S5 == 0) current_key = 5;
+ 102   1          else if (S4 == 0) current_key = 4;
+ 103   1      
+ 104   1      
+ 105   1          if (current_key != num)  //更新
+ 106   1          {
+ 107   2              Delay(20);  
+ 108   2              if (current_key != num)  
+ 109   2              {
+ 110   3                  num = current_key;   
+ 111   3                  if (current_key != 0)     
+ 112   3                  {
+ 113   4                      while (current_key == num)  
+ 114   4                      {
+ 115   5                          if (S7 == 0) current_key = 7;
+ 116   5                          else if (S6 == 0) current_key = 6;
+C51 COMPILER V9.54   MAIN                                                                  12/02/2024 14:27:04 PAGE 3   
+
+ 117   5                          else if (S5 == 0) current_key = 5;
+ 118   5                          else if (S4 == 0) current_key = 4;
+ 119   5                          else current_key = 0;  
+ 120   5                      }
+ 121   4                      return num;  
+ 122   4                  }
+ 123   3              }
+ 124   2          }
+ 125   1      
+ 126   1          return 0;  
+ 127   1      }
+ 128          
+ 129          unsigned char code duan[] = {                        
+ 130          //   0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+ 131              0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90, 0x88, 0x83, 0xC6, 0xA1, 0x86, 0x8E,
+ 132          // black  -     H    J    K    L    N    o   P    U     t    G    Q    r   M    y
+ 133              0xFF, 0xBF, 0x89, 0xE1, 0x8F, 0xC7, 0xC8, 0xA3, 0x8C, 0xC1, 0x87, 0xC2, 0x98, 0xAF, 0xC8, 0x91,
+ 134              0x40, 0x79, 0x24, 0x30, 0x19, 0x12, 0x02, 0x78, 0x00, 0x10, 0xB9
+ 135          };    // 0. 1. 2. 3. 4. 5. 6. 7. 8. 9. -1
+ 136          
+ 137          
+ 138          unsigned char code wei[]={0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};      //位码
+ 139          unsigned char seg[8] = {16,16,16,16,16,16,16,16};
+ 140          
+ 141          
+ 142          void Seg_Show(){
+ 143   1        static unsigned char num;
+ 144   1        
+ 145   1        P0=0xff;P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f);
+ 146   1        P0=wei[num];P2=(P2 & 0x1f) | 0xc0;P2=(P2 & 0x1f);
+ 147   1        P0=duan[seg[num]];P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f);
+ 148   1        
+ 149   1        num++;
+ 150   1        num%=8;
+ 151   1      }
+ 152          
+ 153          void Seg_Set(unsigned char t1,t2,t3,t4,t5,t6,t7,t8){
+ 154   1        seg[0]=t1;
+ 155   1        seg[1]=t2;
+ 156   1        seg[2]=t3;
+ 157   1        seg[3]=t4;
+ 158   1        seg[4]=t5;
+ 159   1        seg[5]=t6;
+ 160   1        seg[6]=t7;
+ 161   1        seg[7]=t8;
+ 162   1        
+ 163   1      }
+ 164          
+ 165          void Time_set();
+ 166          void Time_show();
+ 167          void clock_set();
+ 168          
+ 169          void main()
+ 170          {
+ 171   1        Sys_Init();
+ 172   1        Timer0Init();
+ 173   1        DS1302_Settime(23,59,50);
+ 174   1        while(1)
+ 175   1        {
+ 176   2          
+ 177   2          if(key_flag)
+ 178   2          {
+C51 COMPILER V9.54   MAIN                                                                  12/02/2024 14:27:04 PAGE 4   
+
+ 179   3             key_flag=0;
+ 180   3             num = key_scan();
+ 181   3          }
+ 182   2          
+ 183   2          switch(mode)
+ 184   2          {
+ 185   3            case 1:Time_show();break;
+ 186   3            case 2:Time_set();break;
+ 187   3            case 3:clock_set();break;
+ 188   3          }
+ 189   2          
+ 190   2          if(time_flag)
+ 191   2          {
+ 192   3            time_flag=0;
+ 193   3            hour = Read_Ds1302_Byte(0x85);
+ 194   3            min = Read_Ds1302_Byte(0x83);
+ 195   3            sec = Read_Ds1302_Byte(0x81);
+ 196   3            if((hour/16*10+hour%16)==clock[0])  //如果显示时间与 闹钟数组的 小时 分钟 秒 一一对应 就说明要打开闹钟
+ 197   3            {
+ 198   4              if((min/16*10+min%16)==clock[1])
+ 199   4                {
+ 200   5                if((sec/16*10+sec%16)==clock[2])
+ 201   5                  {
+ 202   6                      buzz_on_flag=1;
+ 203   6                  }
+ 204   5                }
+ 205   4             }  
+ 206   3          }
+ 207   2          if(buzz_on_flag==1)
+ 208   2          {
+ 209   3            P2=(P2 & 0x1f) | 0x80;
+ 210   3            P0=0x00;
+ 211   3            P2=(P2 & 0x1f) | 0xa0;
+ 212   3            beep = 1;
+ 213   3            if(num)
+ 214   3            {
+ 215   4              num=0;
+ 216   4              buzz_on_flag=0;
+ 217   4              P2=(P2 & 0x1f) | 0x80;
+ 218   4              P0=0xff;
+ 219   4              P2=(P2 & 0x1f) | 0xa0;
+ 220   4              beep = 0;
+ 221   4              P2=(P2 & 0x1f) ;
+ 222   4            }
+ 223   3           }
+ 224   2          
+ 225   2        }
+ 226   1      }
+ 227          
+ 228          void Time_show()
+ 229          {
+ 230   1        if(num==4 && buzz_on_flag==0)
+ 231   1        {
+ 232   2          mode=2; //进入设置模式  ,  将小时分钟秒保存成固定值后再传入time_set
+ 233   2          temp[0]=hour/16*10+hour%16;    //           即 temp
+ 234   2          temp[1]=min/16*10+min%16;
+ 235   2          temp[2]=sec/16*10+sec%16;
+ 236   2          num=0;
+ 237   2        }
+ 238   1        
+ 239   1        if(num==7 && buzz_on_flag==0)  
+ 240   1        {
+C51 COMPILER V9.54   MAIN                                                                  12/02/2024 14:27:04 PAGE 5   
+
+ 241   2          mode=3;  //进入闹钟设置模式
+ 242   2          index=0;
+ 243   2          temp[0]=hour/16*10+hour%16;    
+ 244   2          temp[1]=min/16*10+min%16;
+ 245   2          temp[2]=sec/16*10+sec%16;
+ 246   2          num=0;
+ 247   2        }
+ 248   1        Seg_Set(hour/16,hour%16,17,min/16,min%16,17,sec/16,sec%16);
+ 249   1      }
+ 250          
+ 251          void Time_set()
+ 252          {
+ 253   1        if(num==4 && buzz_on_flag==0)
+ 254   1        {
+ 255   2          index++;
+ 256   2          index=index%3;
+ 257   2        }
+ 258   1        if(num==5 && buzz_on_flag==0)  //加1
+ 259   1        {
+ 260   2            temp[index]++;
+ 261   2            switch(index)
+ 262   2          {
+ 263   3            case 0:if(temp[index]>23)temp[index]=0;break;
+ 264   3            case 1:if(temp[index]>59)temp[index]=0;break;
+ 265   3            case 2:if(temp[index]>59)temp[index]=0;break;
+ 266   3          }
+ 267   2          num=0;
+ 268   2        }
+ 269   1        if(num==6 && buzz_on_flag==0)  //设置完成
+ 270   1        {
+ 271   2            ET0=0;
+ 272   2            DS1302_Settime(temp[0],temp[1],temp[2]);
+ 273   2            ET0=1;
+ 274   2            index=0;
+ 275   2            num=0;
+ 276   2            mode=1; //返回mode1->time_show显示模式
+ 277   2        }
+ 278   1        //////////////////////////////////////////////////////////
+ 279   1          if(sec%16%2){  //0.5s闪烁一次
+ 280   2          Seg_Set(temp[0]/10,temp[0]%10,17,temp[1]/10,temp[1]%10,17,temp[2]/10,temp[2]%10);
+ 281   2      
+ 282   2        }else if(sec%16%2==0){
+ 283   2          switch(index){
+ 284   3            case 0:Seg_Set(16,16,17,temp[1]/10,temp[1]%10,17,temp[2]/10,temp[2]%10);break;
+ 285   3            case 1:Seg_Set(temp[0]/10,temp[0]%10,17,16,16,17,temp[2]/10,temp[2]%10);break;
+ 286   3            case 2:Seg_Set(temp[0]/10,temp[0]%10,17,temp[1]/10,temp[1]%10,17,16,16);break;
+ 287   3          }
+ 288   2      //////////////////////////////////////////////////////////
+ 289   2        }
+ 290   1      }
+ 291          
+ 292          void clock_set()
+ 293          {
+ 294   1        if(num==4 && buzz_on_flag==0)
+ 295   1        {
+ 296   2          index++;
+ 297   2          index=index%3;
+ 298   2        }
+ 299   1          if(num==5 && buzz_on_flag==0)  //加1
+ 300   1        {
+ 301   2            clock[index]++;
+ 302   2            switch(index)
+C51 COMPILER V9.54   MAIN                                                                  12/02/2024 14:27:04 PAGE 6   
+
+ 303   2          {
+ 304   3            case 0:if(clock[index]>23)clock[index]=0;break;
+ 305   3            case 1:if(clock[index]>59)clock[index]=0;break;
+ 306   3            case 2:if(clock[index]>59)clock[index]=0;break;
+ 307   3          }
+ 308   2          num=0;
+ 309   2        }
+ 310   1        if(num==6 && buzz_on_flag==0)
+ 311   1        {
+ 312   2           ET0=0;
+ 313   2           DS1302_Settime(temp[0],temp[1],temp[2]);
+ 314   2           ET0=1;
+ 315   2           index=0;
+ 316   2           num=0;
+ 317   2           mode=1;
+ 318   2        }
+ 319   1        ////////////////////////////////////////////////////
+ 320   1         if(sec%16%2){
+ 321   2          Seg_Set(clock[0]/10,clock[0]%10,17,clock[1]/10,clock[1]%10,17,clock[2]/10,clock[2]%10);
+ 322   2      
+ 323   2        }else if(sec%16%2==0){
+ 324   2          switch(index){
+ 325   3            case 0:Seg_Set(16,16,17,clock[1]/10,clock[1]%10,17,clock[2]/10,clock[2]%10);break;
+ 326   3            case 1:Seg_Set(clock[0]/10,clock[0]%10,17,16,16,17,clock[2]/10,clock[2]%10);break;
+ 327   3            case 2:Seg_Set(clock[0]/10,clock[0]%10,17,clock[1]/10,clock[1]%10,17,16,16);break;
+ 328   3          }
+ 329   2        ////////////////////////////////////////////////////////////
+ 330   2       }
+ 331   1      }
+ 332          void Timer0server() interrupt 1
+ 333          {
+ 334   1        Seg_Show();
+ 335   1        count++;
+ 336   1        if(count%10==0)  //10ms  
+ 337   1        {
+ 338   2          time_flag=1;
+ 339   2        }
+ 340   1        if(count%50==0)
+ 341   1        {
+ 342   2          key_flag=1;
+ 343   2        }
+ 344   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1571    ----
+   CONSTANT SIZE    =     51    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     23      15
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      3    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

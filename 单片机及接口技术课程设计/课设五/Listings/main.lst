@@ -1,0 +1,187 @@
+C51 COMPILER V9.54   MAIN                                                                  12/12/2024 09:18:35 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REGX51.H>
+   2          
+   3          sbit Beep = P0 ^ 6;
+   4          
+   5          unsigned char duty; //Õ¼¿Õ±È
+   6          
+   7          //(466Hz-3517Hz)
+   8          code unsigned int FreqTable[] = {
+   9              466, 523, 587, 659, 698, 784, 880,          // µÍÒô1-7
+  10              942, 1047, 1175, 1319, 1397, 1568, 1760,    // ÖÐÒô1-7  //932-960
+  11              1865, 2094, 2351, 2633, 2792, 3134, 3517    // ¸ßÒô1-7
+  12          };
+  13          
+  14          //Òô·û+½ÚÅÄ 
+  15          code unsigned char music[] = {
+  16            11,180,  11,180,  10,180,  10,180,    //index
+  17            9,180,   9,180,   8,180,  8,180,
+  18            11,40,   10,40,    11,40,  14,40,
+  19            11,40,   10,40,    11,40,  10,40,
+  20            11,40,   13,40,   11,40,  10,40,
+  21            11,40,   10,40,    11,40,  13,40,
+  22            11,40,   10,40,    10,40,  9,40,
+  23            10,40,   15,40,    10,40,  9,40,
+  24            13,40,   9,40,     10,40,  15,40,
+  25            10,40,   9,40,     10,40,  9,40,
+  26            10,40,   15,40,    10,40,   9,40,
+  27            13,40,   9,40,     10,40,   15,40,
+  28            10,40,   9,40,  
+  29            10,40,   11,40,    10,40,  14,40,  10,160,
+  30            10,80,   10,40,    11,40,  10,40,  11,40,  13,40,  11,40,
+  31            10,40,   11,40,    10,40,  6,40,   9,160,
+  32            9,80,    17,80,    15,40,  13,40,  11,80,
+  33            10,40,   11,40,    10,40,  6,40,   10,160,
+  34            10,80,   10,40,    11,40,  10,40,  11,40,
+  35            13,40,   11,40,    10,40,  11,40,  10,40,
+  36            9,40,    6,160,    6,20,   7,20,   9,20,
+  37            9,20,    10,20,    11,20,  12,20,  13,20,
+  38            14,20,    15,20,   17,20,   18,20,
+  39            
+  40          
+  41              0xFF   
+  42          };
+  43          
+  44          unsigned char beat, timer0High, timer0Low;   // beat ½ÚÅÄ  timer0H¶¨Ê±Æ÷¸ßÎ»
+  45          unsigned char index =0;  //Êý×éÎ»Ê¶±ð
+  46          unsigned char note;                          //Òô·û
+  47          
+  48          
+  49          void Sys_Init(){
+  50   1        P0=0xff;P2=(P2 & 0x1f) | 0x80;P2=(P2 & 0x1f);
+  51   1        P0=0xaf;P2=(P2 & 0x1f) | 0xa0;P2=(P2 & 0x1f);
+  52   1        P0=0xff;P2=(P2 & 0x1f) | 0xc0;P2=(P2 & 0x1f); //¶ÎÂë
+  53   1        P0=0xff;P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f); //Î»Âë
+  54   1      }
+C51 COMPILER V9.54   MAIN                                                                  12/12/2024 09:18:35 PAGE 2   
+
+  55          
+  56          
+  57          void SetTimer(unsigned int freq) {
+  58   1          unsigned int TimerValue = 65536 - (12000000 / 12 / 2 / freq);         // 120000000/12  12mhz/12µÃÊ±ÖÓÆ
+             -µÂÊ 1mhz   -¡·  1mhz/2 Éú³É·äÃùÆ÷ËùÐè·­×ª·½²¨    /freqµÃ³ö°ëÖÜÆÚ¼ÆÊýÖµ
+  59   1          timer0High = TimerValue/256;   //»ñÈ¡¸ß°ËÎ»                       //ÀýÈç 12mhz/12/2/466 =1073  timerva
+             -lue=65536-1073=64463   
+  60   1          timer0Low = TimerValue%256;    //»ñÈ¡µÍ°ËÎ»
+  61   1      }
+  62          
+  63          
+  64          void Playmusic() {
+  65   1          if (music[index] == 0xFF) 
+  66   1               {                           //Ê¶±ðµ½Ä©Î²0xff£¬´ÓÍ·¿ªÊ¼²¥·Å
+  67   2                index = 0;  
+  68   2               }
+  69   1               else 
+  70   1                  {
+  71   2                      note = music[index++];   //ÏÈÒô·û
+  72   2                      beat = music[index++];   //ÔÙ½ÚÅÄ
+  73   2                    
+  74   2                      // led
+  75   2                      P2 = (P2 & 0x1F) | 0x80;
+  76   2                      P0 = ~(0x01 << (note % 7));  //ÈôÎª0xfe,Ôò<<»áÒç³ö
+  77   2                      P2 = (P2 & 0x1F);
+  78   2      //              switch (note%7)
+  79   2      //              {
+  80   2      //                case 0: duty=10; break;
+  81   2      //                case 1: duty=20;break;
+  82   2      //                case 2: duty=30;break;
+  83   2      //                case 3: duty=45;break;
+  84   2      //                case 4: duty=60;break;
+  85   2      //                case 5: duty=75;break;
+  86   2      //                case 6: duty=100;break;
+  87   2      //              }
+  88   2      
+  89   2                      SetTimer(FreqTable[note]);  //´¦ÀíµÃ³ö¶¨Ê±Æ÷¸ßµÍºóÅª³öÆµÂÊ¼´Òô·û
+  90   2                      TR0 = 1; 
+  91   2                   }
+  92   1      }
+  93          
+  94          
+  95          void Timer0server() interrupt 1 {
+  96   1      
+  97   1          TR0 = 0;  //¹Ø¶¨Ê±Æ÷
+  98   1          P2 = (P2 & 0x1F) | 0xA0;  
+  99   1          Beep = ~Beep;  
+ 100   1          P2 = (P2 & 0x1F);  
+ 101   1          TH0 = timer0High;    //ÖØÔØÊ¹µÃÆµÂÊ´ïµ½
+ 102   1          TL0 = timer0Low;
+ 103   1          TR0 = 1;  
+ 104   1      }
+ 105          
+ 106          // Timer1
+ 107          //void Timer1server() interrupt 3 {
+ 108          //    static unsigned char pwmCounter = 0;
+ 109          //    pwmCounter++;
+ 110          
+ 111          //      P2 = (P2 & 0x1F) | 0x80;
+ 112          //    if (pwmCounter <= duty)
+ 113          //      {
+ 114          //        
+C51 COMPILER V9.54   MAIN                                                                  12/12/2024 09:18:35 PAGE 3   
+
+ 115          //           P0=0xfe;
+ 116          //        
+ 117          //          //P0 = (P0 & 0x40) | 0xBF;   
+ 118          //      
+ 119          //      } else 
+ 120          //         {
+ 121          //           P0=0xff;
+ 122          //            //P0 = (P0 & 0x40) | 0xFF;  
+ 123          //           //P0=0xff;   
+ 124          //            
+ 125          //         }
+ 126          //         P2 = (P2 & 0x1F); 
+ 127          //    if (pwmCounter >= 100) pwmCounter = 0;  
+ 128          //}
+ 129          
+ 130          void DelayMs(unsigned int ms) {
+ 131   1          unsigned int i, j;
+ 132   1          for (i = ms; i > 0; i--) {
+ 133   2              for (j = 123; j > 0; j--);  
+ 134   2          }
+ 135   1      }
+ 136          
+ 137          
+ 138          void main() {
+ 139   1          Sys_Init(); 
+ 140   1          
+ 141   1          TMOD = 0x01;  // tmod=0x01 ¶¨Ê±Æ÷0   ////& 0x10¶¨Ê±Æ÷1  
+ 142   1          EA = 1;  
+ 143   1          ET0 = 1;  
+ 144   1          
+ 145   1      //   // ¶¨Ê±Æ÷1
+ 146   1      //  
+ 147   1      //    TH1 = 0xFC;  
+ 148   1      //    TL1 = 0x18;  
+ 149   1      //    TR1 = 1; 
+ 150   1      //    ET1 = 1; 
+ 151   1        
+ 152   1          while (1) {
+ 153   2              Playmusic();  
+ 154   2              DelayMs(beat * 50);    //*50ms
+ 155   2              TR0 = 0;  
+ 156   2          }
+ 157   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    263    ----
+   CONSTANT SIZE    =    245    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      6    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

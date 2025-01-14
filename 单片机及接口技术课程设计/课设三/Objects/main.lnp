@@ -1,0 +1,4 @@
+".\Objects\main.obj",
+".\Objects\csb.obj" 
+TO ".\Objects\main" 
+PRINT(".\Listings\main.m51")

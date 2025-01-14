@@ -1,0 +1,376 @@
+C51 COMPILER V9.54   MAIN                                                                  12/09/2024 13:51:00 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <REGX51.H>
+   2          #include "iic.h"
+   3          #include "onewire.h"
+   4          
+   5          unsigned char index=0;  //电压-频率-温度 模式
+   6          unsigned char mode=1;
+   7          unsigned char num; //按键值
+   8          unsigned char count; //中断累加值
+   9          unsigned char ledcount;
+  10          unsigned int final_freq,save_freq;
+  11          unsigned int final_ad,save_ad;        //最终0-5v电压转化为百位数,方便分割百位十位个位
+  12          unsigned int final_T,save_temp;
+  13          unsigned int processed_threshold=2;  //0.2*10
+  14          float T,ad,threshold_ad=0.2;  //直接读取到的温度值
+  15          sfr AUXR =0x8E;
+  16          bit key_flag,freq_flag,temperature_flag,ad_flag,voltage_flag=0;
+  17          
+  18          sbit S7 = P3 ^ 0; // S7 
+  19          sbit S6 = P3 ^ 1; // S6 
+  20          sbit S5 = P3 ^ 2; // S5 
+  21          sbit S4 = P3 ^ 3; // S4
+  22          
+  23          void shu_ju_show();
+  24          void shu_ju_hui_xian();
+  25          void voltage_set();
+  26          
+  27          void Delay(unsigned int xms)
+  28          {
+  29   1        unsigned char i, j;
+  30   1        while(xms--)
+  31   1        {
+  32   2          i = 2;
+  33   2          j = 239;
+  34   2          do
+  35   2          {
+  36   3            while (--j);
+  37   3          } while (--i);
+  38   2        }
+  39   1      }
+  40          
+  41          void Sys_Init(){
+  42   1        P0=0xff;P2=(P2 & 0x1f) | 0x80;P2=(P2 & 0x1f);
+  43   1        P0=0xaf;P2=(P2 & 0x1f) | 0xa0;P2=(P2 & 0x1f);
+  44   1        P0=0xff;P2=(P2 & 0x1f) | 0xc0;P2=(P2 & 0x1f); //段码
+  45   1        P0=0xff;P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f); //位码
+  46   1      }
+  47          
+  48          
+  49          void Timer1Init(void)   //1ms 12mhz
+  50          {
+  51   1        AUXR &= 0xBF;   //定时器时钟12T模式
+  52   1        TMOD &= 0x0F;   //设置定时器模式  
+  53   1        TL1 = 0x18;   
+  54   1        TH1 = 0xFC; 
+C51 COMPILER V9.54   MAIN                                                                  12/09/2024 13:51:00 PAGE 2   
+
+  55   1        TF1 = 0;    
+  56   1        TR1 = 1;    
+  57   1        ET1 = 1;
+  58   1        EA = 1;
+  59   1      }
+  60          
+  61          unsigned char key_scan()  //获取键盘值
+  62          {
+  63   1          static unsigned char num = 0; 
+  64   1          unsigned char current_key = 0;     
+  65   1      
+  66   1      
+  67   1          if (S7 == 0) current_key = 7;
+  68   1          else if (S6 == 0) current_key = 6;
+  69   1          else if (S5 == 0) current_key = 5;
+  70   1          else if (S4 == 0) current_key = 4;
+  71   1      
+  72   1      
+  73   1          if (current_key != num)  //更新
+  74   1          {
+  75   2              Delay(20);  
+  76   2              if (current_key != num)  
+  77   2              {
+  78   3                  num = current_key;   
+  79   3                  if (current_key != 0)     
+  80   3                  {
+  81   4                      while (current_key == num)  
+  82   4                      {
+  83   5                          if (S7 == 0) current_key = 7;
+  84   5                          else if (S6 == 0) current_key = 6;
+  85   5                          else if (S5 == 0) current_key = 5;
+  86   5                          else if (S4 == 0) current_key = 4;
+  87   5                          else current_key = 0;  
+  88   5                      }
+  89   4                      return num;  
+  90   4                  }
+  91   3              }
+  92   2          }
+  93   1      
+  94   1          return 0;  
+  95   1      }
+  96          
+  97          unsigned char code duan[] = {                        
+  98          //   0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+  99              0xC0, 0xF9, 0xA4, 0xB0, 0x99, 0x92, 0x82, 0xF8, 0x80, 0x90, 0x88, 0x83, 0xC6, 0xA1, 0x86, 0x8E,
+ 100          // black  -     H      J     K     L    N     o     P    U     t      G      Q     r    M     y
+ 101              0xFF, 0xBF, 0x89, 0xE1, 0x8F, 0xC7, 0xC8, 0xA3, 0x8C, 0xC1, 0x87, 0xC2, 0x98, 0xAF, 0xC8, 0x91,
+ 102              0x40, 0x79, 0x24, 0x30, 0x19, 0x12, 0x02, 0x78, 0x00, 0x10, 0xB9
+ 103          };    // 0. 1. 2. 3. 4. 5. 6. 7. 8. 9. -1
+ 104          
+ 105          
+ 106          unsigned char code wei[]={0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};      //位码
+ 107          unsigned char seg[8] = {16,16,16,16,16,16,16,16};
+ 108          
+ 109          
+ 110          void Seg_Show(){
+ 111   1        static unsigned char num;
+ 112   1        
+ 113   1        P0=0xff;P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f);
+ 114   1        P0=wei[num];P2=(P2 & 0x1f) | 0xc0;P2=(P2 & 0x1f);
+ 115   1        P0=duan[seg[num]];P2=(P2 & 0x1f) | 0xe0;P2=(P2 & 0x1f);
+ 116   1        
+C51 COMPILER V9.54   MAIN                                                                  12/09/2024 13:51:00 PAGE 3   
+
+ 117   1        num++;
+ 118   1        num%=8;
+ 119   1      }
+ 120          
+ 121          void Seg_Set(unsigned char t1,t2,t3,t4,t5,t6,t7,t8){
+ 122   1        seg[0]=t1;
+ 123   1        seg[1]=t2;
+ 124   1        seg[2]=t3;
+ 125   1        seg[3]=t4;
+ 126   1        seg[4]=t5;
+ 127   1        seg[5]=t6;
+ 128   1        seg[6]=t7;
+ 129   1        seg[7]=t8;
+ 130   1        
+ 131   1      }
+ 132          
+ 133          void NE555_Init(){
+ 134   1        AUXR &= 0x7F;   //定时器时钟12T模式
+ 135   1        TMOD = 0x05;    //设置定时器模式
+ 136   1        TL0 = 0;    //设置定时初值
+ 137   1        TH0 = 0;    //设置定时初值
+ 138   1        TF0 = 0;    //清除TF0标志
+ 139   1        TR0 = 1;    //定时器0开始计时
+ 140   1      }
+ 141          
+ 142          void main()
+ 143          {
+ 144   1        Sys_Init();
+ 145   1        NE555_Init();
+ 146   1        Timer1Init();
+ 147   1        while(1)
+ 148   1        {
+ 149   2          
+ 150   2          if(key_flag)
+ 151   2          {
+ 152   3             key_flag=0;
+ 153   3             num = key_scan();
+ 154   3          }
+ 155   2      ////////////////////////////////    
+ 156   2          if(freq_flag)
+ 157   2          {
+ 158   3            freq_flag=0;
+ 159   3            TR0 = 0;
+ 160   3            final_freq=TH0*256+TL0;
+ 161   3            TH0=0;
+ 162   3            TL0=0;
+ 163   3            TR0=1;
+ 164   3          }
+ 165   2      /////////////////////////////////////
+ 166   2          if(temperature_flag)
+ 167   2          {
+ 168   3            temperature_flag=0;
+ 169   3            
+ 170   3            ET0=0;//关闭中断，防止影响时序
+ 171   3            T = rd_temperature();//获取温度值
+ 172   3            ET0=1;//读取结束，开启中断
+ 173   3            final_T=(int)(T*100);
+ 174   3          }
+ 175   2      ////////////////////////////////////////////
+ 176   2          if(ad_flag)
+ 177   2          {
+ 178   3            ad_flag=0;
+C51 COMPILER V9.54   MAIN                                                                  12/09/2024 13:51:00 PAGE 4   
+
+ 179   3            ad = PCF8591_ADin(0x03);    //获取pcf8591电压
+ 180   3            final_ad = (int)(ad/255.0*5*100);;  //转化成0-5v   ad/255.0 乘 参考电压（5v）
+ 181   3            
+ 182   3          }
+ 183   2          
+ 184   2          switch (mode)
+ 185   2          {
+ 186   3            case 1: shu_ju_show();break;
+ 187   3            case 2: shu_ju_hui_xian();break;
+ 188   3            case 3: voltage_set();break;
+ 189   3          }
+ 190   2      //    Seg_Set(25,16,16,16,16,16,final_ad/100+32,final_ad/10%10);
+ 191   2      //    Seg_Set(15,16,final_freq/100000%10,final_freq/10000%10,final_freq/1000%10,final_freq/100%10,final_freq
+             -/10%10,final_freq%10);
+ 192   2      //    Seg_Set(12,16,16,16,final_T/1000%10,final_T/100%10+32,final_T/10%10,final_T%10);
+ 193   2        }
+ 194   1      
+ 195   1      }
+ 196          
+ 197          void shu_ju_show()
+ 198          {
+ 199   1        if(num==4)
+ 200   1        {
+ 201   2          num=0;
+ 202   2          index++;
+ 203   2          index=index%3;   //index=0 电压 index=1 频率 index=2 温度 
+ 204   2        }
+ 205   1        
+ 206   1        if(num==5)
+ 207   1        {
+ 208   2          num=0;
+ 209   2          save_temp=final_T;
+ 210   2          save_ad=final_ad;
+ 211   2          save_freq=final_freq;
+ 212   2        }
+ 213   1        
+ 214   1        if(num==6)
+ 215   1        {
+ 216   2          index=0;  //传过去让index=0
+ 217   2          num=0;
+ 218   2          mode=2;  //数据回显
+ 219   2          P2=(P2 & 0x1f) | 0x80;   //电压模式下 led 1 亮
+ 220   2          P0=0xff;
+ 221   2          P2=(P2 & 0x1f);
+ 222   2        }
+ 223   1        if(index==0)
+ 224   1        {
+ 225   2            P2=(P2 & 0x1f) | 0x80;   //电压模式下 led 1 亮
+ 226   2            P0=0xfe;
+ 227   2            P2=(P2 & 0x1f);
+ 228   2            Seg_Set(25,16,16,16,16,16,final_ad/100+32,final_ad/10%10);
+ 229   2        }else if(index==1)   //频率模式下 led 2 亮
+ 230   1        {
+ 231   2            P2=(P2 & 0x1f) | 0x80;  
+ 232   2            P0=0xfd;  //1111 1101
+ 233   2            P2=(P2 & 0x1f);
+ 234   2           Seg_Set(15,16,final_freq/100000%10,final_freq/10000%10,final_freq/1000%10,final_freq/100%10,final_freq
+             -/10%10,final_freq%10);
+ 235   2        }else if(index==2)  //温度模式下 led3 亮
+ 236   1          {
+ 237   2            P2=(P2 & 0x1f) | 0x80;  
+ 238   2            P0=0xfb;   //1111 1011
+C51 COMPILER V9.54   MAIN                                                                  12/09/2024 13:51:00 PAGE 5   
+
+ 239   2            P2=(P2 & 0x1f);
+ 240   2           Seg_Set(12,16,16,16,final_T/1000%10,final_T/100%10+32,final_T/10%10,final_T%10);
+ 241   2          }
+ 242   1        if(final_ad>(threshold_ad*100) && voltage_flag==1)
+ 243   1        {
+ 244   2          if (ledcount % 2 == 0) 
+ 245   2          {
+ 246   3            P2 = (P2 & 0x1f) | 0x80;  
+ 247   3            P0 = 0x0f;  // L4-L8 
+ 248   3          }else
+ 249   2          {
+ 250   3            P2 = (P2 & 0x1f) | 0x80;  
+ 251   3            P0 = 0xFF;  // L4-L8 
+ 252   3          }
+ 253   2        }
+ 254   1        
+ 255   1      }
+ 256          void shu_ju_hui_xian()
+ 257          {
+ 258   1        if(num==4)
+ 259   1        {
+ 260   2          num=0;
+ 261   2          index++;
+ 262   2          index=index%3;
+ 263   2        }
+ 264   1        
+ 265   1        
+ 266   1        if(num==6)
+ 267   1        {
+ 268   2          num=0;
+ 269   2          mode=3;  //数据显示
+ 270   2        }
+ 271   1      
+ 272   1          if(index==0)
+ 273   1        {
+ 274   2            Seg_Set(18,25,16,16,16,16,save_ad/100+32,save_ad/10%10);
+ 275   2        }else if(index==1)
+ 276   1        {
+ 277   2           Seg_Set(18,15,save_freq/100000%10,save_freq/10000%10,save_freq/1000%10,save_freq/100%10,save_freq/10%1
+             -0,save_freq%10);
+ 278   2        }else if(index==2)
+ 279   1          {
+ 280   2           Seg_Set(18,12,16,16,save_temp/1000%10,save_temp/100%10+32,save_temp/10%10,save_temp%10);
+ 281   2          }
+ 282   1        
+ 283   1      }
+ 284          
+ 285          
+ 286          
+ 287          void voltage_set()
+ 288          {
+ 289   1        if(num==7)
+ 290   1        {
+ 291   2          voltage_flag=1;
+ 292   2          num=0;
+ 293   2          threshold_ad+=0.2;    //0.2-5.0 v
+ 294   2          if(threshold_ad>5.0)
+ 295   2          {
+ 296   3            threshold_ad=0.2;
+ 297   3          }
+ 298   2          processed_threshold=(int)(threshold_ad*10);  //转化后便于显示
+ 299   2        }
+C51 COMPILER V9.54   MAIN                                                                  12/09/2024 13:51:00 PAGE 6   
+
+ 300   1        if(num==6)
+ 301   1        {
+ 302   2          index=0;
+ 303   2          num=0;
+ 304   2          mode=1;    //数据显示
+ 305   2        }
+ 306   1      
+ 307   1        Seg_Set(24,16,16,16,16,16,processed_threshold/10+32,processed_threshold%10);
+ 308   1      }
+ 309          void timer1server() interrupt 3
+ 310          {
+ 311   1        Seg_Show();
+ 312   1        count++;
+ 313   1        if(count%10==0)
+ 314   1        {
+ 315   2          key_flag=1;
+ 316   2        }
+ 317   1      
+ 318   1        if(count%50==0)
+ 319   1        {
+ 320   2          ad_flag=1;
+ 321   2        }
+ 322   1        
+ 323   1        if(count%100==0)   //100ms
+ 324   1        {
+ 325   2          temperature_flag=1;
+ 326   2        }
+ 327   1      
+ 328   1        if(count%1000==0)
+ 329   1        {
+ 330   2          freq_flag=1;
+ 331   2        }
+ 332   1        
+ 333   1        if (count % 200 == 0)  // 200ms
+ 334   1      {
+ 335   2         ledcount++;
+ 336   2      }
+ 337   1      
+ 338   1        count=count%1000;
+ 339   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1711    ----
+   CONSTANT SIZE    =     51    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     41      15
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      5    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
