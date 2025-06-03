@@ -1,0 +1,20 @@
+
+#path: yolov5-7.0/mysegdata # dataset root dir
+train: D:\yolov5-7.0\mysegdata\images\train # train images (relative to 'path') 128 images
+val: D:\yolov5-7.0\mysegdata\images\val  # val images (relative to 'path') 128 images
+
+#python segment\train.py --batch-size 2 --epochs 3 --data mysegdata/mydataset.yaml --weights yolov5s-seg.pt
+#torch.load weight_only=False
+#python segment\predict.py --source D:\yolov5-test --weights runs/train-seg/exp/weights/best.pt
+#删去weights
+#python segment\predict.py --source D:\yolov5-video --weights runs/train-seg/exp/weights/best.pt
+# Classes
+names:
+  0: DISPLAY
+  1: KEY
+  2: MARTIX
+  3: MCU
+  4: SCREEN
+ 
+
+
